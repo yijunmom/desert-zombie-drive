@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Desert Zombie Escape</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      background: #000;
+    }
+    #scoreBoard {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-size: 20px;
+      font-family: 'Arial';
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div id="scoreBoard">Score: 0 | HP: 3 | Bombs: 1 | Stage: 1</div>
+
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+  <!-- 사운드 -->
+  <audio id="explosionSound" src="sounds/explosion.mp3"></audio>
+  <audio id="bgMusic" src="sounds/background_music.mp3" loop autoplay></audio>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const GAME_WIDTH = canvas.width;
+    const GAME_HEIGHT = canvas.height;
+
+    // 이미지
+    const backgroundImg = new Image();
+    backgroundImg.src = 'images/background.png';
+
+    const tankImg = new Image();
+    tankImg.src = 'images/tank.png';
+
+    const zombieImg = new Image();
+    zombieImg.src = 'images/zombie.png';
+
+    const bombImg = new Image();
+    bombImg.src = 'images/bomb.png';
+
+    const bossImg = new Image();
+    bossImg.src = 'images/boss_zombie.png'; // 보스 좀비 이미지 추가 필요
+
+    // 사운드
+    const explosionSound = document.getElementById('explosionSound');
+
+    // 게임 변수
+    let tank = {
+      x: 100,
+      y: 300,
+      width: 80,
+      height: 80,
+      speed: 5,
+      hp: 3
+    };
+
+    let bombs = [];
+    let zombies = [];
+    let bosses = [];
+    let score = 0;
+    let bombUpgrade = 1; // 폭탄 업그레이드 (1 = 기본)
+    let bombKillCount = 0; // 5킬 체크
+    let bombUpgradeUses = 0; // 강화된 폭탄 사용 횟수
+    let distance = 0;
+    let stage = 1;
+    let zombieSpeed = 2;
+
+    const keys = {};
+
+    document.addEventListener('keydown', (e) => {
+      keys[e.key] = true;
+
+      if (e.key === ' ') {
+        fireBomb();
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      keys[e.key] = false;
+    });
+
+    function fireBomb() {
+      for (let i = 0; i < bombUpgrade; i++) {
+        bombs.push({
+          x: tank.x + tank.width,
+          y: tank.y + tank.height / 2 - 5 + i * 15 - ((bombUpgrade-1)*7),
+          width: 20,
+          height: 10,
+          speed: 7
+        });
+      }
+      if (bombUpgrade > 1) {
+        bombUpgradeUses++;
+        if (bombUpgradeUses >= 3) {
+          bombUpgrade = 1;
+          bombUpgradeUses = 0;
+        }
+      }
+    }
+
+    function spawnZombie() {
+      const randomY = Math.random() * (GAME_HEIGHT - 100);
+      zombies.push({
+        x: GAME_WIDTH,
+        y: randomY,
+        width: 60,
+        height: 80,
+        speed: zombieSpeed,
+        hp: 1
+      });
+    }
+
+    function spawnBoss() {
+      bosses.push({
+        x: GAME_WIDTH,
+        y: Math.random() * (GAME_HEIGHT - 100),
+        width: 100,
+        height: 120,
+        speed: zombieSpeed * 0.7,
+        hp: 10
+      });
+    }
+
+    setInterval(spawnZombie, 1500);
+
+    function isColliding(a, b) {
+      return (
+        a.x < b.x + b.width &&
+        a.x + a.width > b.x &&
+        a.y < b.y + b.height &&
+        a.y + a.height > b.y
+      );
+    }
+
+    function updateScoreBoard() {
+      document.getElementById('scoreBoard').innerText = `Score: ${score} | HP: ${tank.hp} | Bombs: ${bombUpgrade} | Stage: ${stage}`;
+    }
+
+    function updateStage() {
+      if (distance >= stage * 10000) { // 1만 미터마다 스테이지 업
+        stage++;
+        zombieSpeed += 0.5;
+        spawnBoss(); // 새 스테이지마다 보스 등장
+      }
+    }
+
+    function gameLoop() {
+      ctx.drawImage(backgroundImg, 0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+      // 탱크 이동
+      if (keys['ArrowLeft'] && tank.x > 0) tank.x -= tank.speed;
+      if (keys['ArrowRight'] && tank.x < GAME_WIDTH - tank.width) tank.x += tank.speed;
+      if (keys['ArrowUp'] && tank.y > 0) tank.y -= tank.speed;
+      if (keys['ArrowDown'] && tank.y < GAME_HEIGHT - tank.height) tank.y += tank.speed;
+
+      ctx.drawImage(tankImg, tank.x, tank.y, tank.width, tank.height);
+
+      // 폭탄 이동
+      for (let i = bombs.length - 1; i >= 0; i--) {
+        bombs[i].x += bombs[i].speed;
+        ctx.drawImage(bombImg, bombs[i].x, bombs[i].y, bombs[i].width, bombs[i].height);
+
+        if (bombs[i].x > GAME_WIDTH) {
+          bombs.splice(i, 1);
+        }
+      }
+
+      // 좀비 이동
+      for (let i = zombies.length - 1; i >= 0; i--) {
+        zombies[i].x -= zombies[i].speed;
+        ctx.drawImage(zombieImg, zombies[i].x, zombies[i].y, zombies[i].width, zombies[i].height);
+
+        if (zombies[i].x + zombies[i].width < 0) {
+          zombies.splice(i, 1);
+        }
+
+        // 충돌 체크
+        if (isColliding(zombies[i], tank)) {
+          zombies.splice(i, 1);
+          tank.hp -= 1;
+          updateScoreBoard();
+          if (tank.hp <= 0) {
+            alert('Game Over!');
+            document.location.reload();
+          }
+        }
+      }
+
+      // 보스 이동
+      for (let i = bosses.length - 1; i >= 0; i--) {
+        bosses[i].x -= bosses[i].speed;
+        ctx.drawImage(bossImg, bosses[i].x, bosses[i].y, bosses[i].width, bosses[i].height);
+
+        if (bosses[i].x + bosses[i].width < 0) {
+          bosses.splice(i, 1);
+        }
+
+        if (isColliding(bosses[i], tank)) {
+          bosses.splice(i, 1);
+          tank.hp -= 2; // 보스한테 맞으면 2 감소
+          updateScoreBoard();
+          if (tank.hp <= 0) {
+            alert('Game Over!');
+            document.location.reload();
+          }
+        }
+      }
+
+      // 폭탄-좀비 충돌
+      for (let i = bombs.length - 1; i >= 0; i--) {
+        for (let j = zombies.length - 1; j >= 0; j--) {
+          if (isColliding(bombs[i], zombies[j])) {
+            explosionSound.currentTime = 0;
+            explosionSound.play();
+
+            zombies[j].hp--;
+            if (zombies[j].hp <= 0) {
+              zombies.splice(j, 1);
+              score++;
+              bombKillCount++;
+              if (bombKillCount >= 5) {
+                bombUpgrade = 3;
+                bombKillCount = 0;
+                bombUpgradeUses = 0;
+              }
+            }
+            bombs.splice(i, 1);
+            updateScoreBoard();
+            break;
+          }
+        }
+      }
+
+      // 폭탄-보스 충돌
+      for (let i = bombs.length - 1; i >= 0; i--) {
+        for (let j = bosses.length - 1; j >= 0; j--) {
+          if (isColliding(bombs[i], bosses[j])) {
+            explosionSound.currentTime = 0;
+            explosionSound.play();
+
+            bosses[j].hp--;
+            if (bosses[j].hp <= 0) {
+              bosses.splice(j, 1);
+              score += 10; // 보스는 점수 10점!
+            }
+            bombs.splice(i, 1);
+            updateScoreBoard();
+            break;
+          }
+        }
+      }
+
+      distance += 300 / 60; // 탱크가 1분에 1만미터 가는 속도
+      updateStage();
+      requestAnimationFrame(gameLoop);
+    }
+
+    window.onload = () => {
+      updateScoreBoard();
+      gameLoop();
+    };
+  </script>
+</body>
+</html>
